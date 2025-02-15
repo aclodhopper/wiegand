@@ -5,75 +5,23 @@ Wiegand protocol has no specific pulse timing specs.
 Protocol typically sends normal-high TTL input via Data0 and Data1 signal wires.
 Each is pulsed low to signal either a 0 bit (on the Data0 line) or a 1 bit (on the Data1 line).
 This reader triggers on falling edges and assumes the read is done if at least 250ms has elapsed since last bit received.
-My implementation reads any number of bits, but of course typical cards contain 26 or 36 bit numbers.
+The implementation reads any number of bits, but of course typical HID cards contain 26 or 36 bit numbers.
 You can discard bad reads with other bit counts on the receiving end if you like, or adjust the code to discard them on this side (see comment in code).
 
-Use the parseCard method to optionally parse the returned integer into parts (facility, card number, etc),
+Use the Card.parse() method to optionally parse the returned card into parts (facility, card number, etc),
     and to apply parity checking. Several common formats are implemented, but you can add your own.
-
-TODO: Eventually, it would be nice to refactor the code to return a Card object rather than a card number/bit tuple,
-    and move the card formatting/parsing logic there.
-TODO: Reimplement using asyncio functionality
-
-Sample Usage:
-#-------
-from wiegand import Wiegand
-
-WIEGAND_DATA0 = 13  # GPIO13 / D7 / Green
-WIEGAND_DATA1 = 4   # GPIO4 / D2 / White
-
-def on_card(card):
-    print("Raw Number", card.raw_number, "/", card.bits)
-    formats = [26,36]
-    parts = None
-    for f in formats:
-        if card.parse(f):
-            break
-    if card.valid:
-        print("Format:", f, "Card:", card)
-    else:
-        print("Invalid card or unknown format")
-
-Wiegand(WIEGAND_DATA0, WIEGAND_DATA1, on_card)
-#------
-
-Claude's reader details:
-    RED    - Power, 6-12 VDC
-    BLACK  - Ground
-    GREEN  - data0 (5V TTL, normally high)
-    WHITE  - data1 (5V TTL, normally high)
-    BLUE   - LED
-    Yellow - Beep
-    
-    
-import micropython
-micropython.alloc_emergency_exception_buf(100)
-
-def _on_pin(self, bitvalue):
-    micropython.schedule(self._process_bit, bitvalue)
-
-def _process_bit(self, bitvalue):
-    self.next_card <<= 1
-    self.next_card += bitvalue
-    self.bits += 1
-    ...
-
 """
 
 from machine import Pin, Timer
-import micropython
-
-micropython.alloc_emergency_exception_buf(100)
 
 class Wiegand:
     def __init__(self, pin0, pin1, callback = None, timer_id=-1):
         """
-        pin0 - the GPIO that goes high when a zero is sent by the reader (Green)
-        pin1 - the GPIO that goes high when a one is sent by the reader (White)
-        callback - the function called (with two args: card and read count)
-                   when a card is detected.  Note that micropython interrupt
-                   implementation limitations apply to the callback!
-                   Leave None if you do not want a callback and will poll get_card() instead.
+        pin0 - the GPIO that goes low when a zero is sent by the reader (Green)
+        pin1 - the GPIO that goes low when a one is sent by the reader (White)
+        callback - the function called with single card argument when a card is read.
+                   eg. def mycallback(card)
+                   Leave None if you do not want a callback and will poll using get_card() instead.
         timer_id - the Timer ID to use for completion checks. Defaults to -1
         """
         self.pin0 = Pin(pin0, Pin.IN, Pin.PULL_UP)
@@ -129,6 +77,7 @@ class Wiegand:
             # no additional bits detected in last timer period - read must be done
             self.timer.deinit()
             self.timerSet = False
+            # can add validation here if you want to suppress/discard unrecognized data (eg bad bit counts, etc)
             self.last_card = Card(self.next_card, self.bits)
             self.card_count += 1
             self.doneCheckBits = 0
@@ -137,15 +86,27 @@ class Wiegand:
             if self.callback:
                 self.callback(self.last_card)
         else:
-            # Bits were received within the last period.
+            # more bits were received within the last period.
             # Remember new bit count to check for change in the next period
             self.doneCheckBits = self.bits
 
 class Card:
     """
-    Container for a RFID card reader result.
+    Container for a HID card reader result.
     Implements support for parsing and printing cards in various formats.
-    Cards typically have a facility and a number.
+    Cards typically have a facility code and a number.
+
+    Properties:
+        raw_number:  Integer form of card value.
+        bits:  Number of bits of data read from the wiegand input.
+        facility:  if successfully parsed, the facility code contained in the card data.
+        number:  if successfully parsed, the card number contained in the card data.
+        format:  if successfully parsed, the format code that was applied to the card data.
+        valid:  indicates whether the card data was successfully parsed by the previous parse() call.
+    Methods:
+        parse(): applies a card format to the raw card data. If successful, it will set "valid". "facility", "number", and "format".
+            Parse will assume a format based on the bit count, but you can force a different format explicitly.
+            Can extend the logic with your own formats inside this method.
     """
 
     def __init__(self, raw_number, bits):
