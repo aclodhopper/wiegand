@@ -31,8 +31,8 @@ The HID card reader I tested was a no-name reader with the following specs:
 | Blue | LED |
 | Yellow | Beep |
 
-Even though the power input requires 6V+, the Wiegand signals were always 5V. I used voltage divider resistors (1k / 2.2k) to adapt the signals to 3.3V.
+Even though the power input requires 6V+, the Wiegand signals were always 5V. I used voltage divider resistors (1k / 2.2k) to adapt the data0 and data1 signals to 3.3V.
 
 ## Credits
 
-Heavily influenced by and copied from this project [micropython-wiegand](https://github.com/pjz/micropython-wiegand)
+Forked from this project [micropython-wiegand](https://github.com/pjz/micropython-wiegand)
