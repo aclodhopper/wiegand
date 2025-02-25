@@ -1,28 +1,32 @@
-"""
-wiegand.py - read card IDs from a wiegand interface card reader
-
-Wiegand protocol has no specific pulse timing specs.
-Protocol typically sends normal-high TTL input via Data0 and Data1 signal wires.
-Each is pulsed low to signal either a 0 bit (on the Data0 line) or a 1 bit (on the Data1 line).
-This reader triggers on falling edges and assumes the read is done if at least 250ms has elapsed since last bit received.
-The implementation reads any number of bits, but of course typical HID cards contain 26 or 36 bit numbers.
-You can discard bad reads with other bit counts on the receiving end if you like, or adjust the code to discard them on this side (see comment in code).
-
-Use the Card.parse() method to optionally parse the returned card into parts (facility, card number, etc),
-    and to apply parity checking. Several common formats are implemented, but you can add your own.
-"""
-
 from machine import Pin, Timer
 
 class Wiegand:
-    def __init__(self, pin0, pin1, callback = None, timer_id=-1):
+    """
+    Read data from a wiegand interface card reader.
+    Optionally format and decode and verify the resulting card data.
+
+    Wiegand protocol has no specific pulse timing specs.
+    Protocol typically sends normally-high 5V input via Data0 (green) and Data1 (white) signal wires.
+    Each is pulsed low to signal either a 0 bit (on the Data0 line) or a 1 bit (on the Data1 line).
+    This reader triggers on falling edges and assumes the read is done if at least 250ms has elapsed since last bit received.
+    The implementation reads any number of bits.
+    You can discard bad reads with unexpected bit counts on the receiving end if you like, or adjust the code to discard them on this side (see comment in code).
+
+    Use the Card.parse() method to optionally parse the returned card into parts (facility, card number, etc),
+        and to apply parity checking. Several common formats are implemented, but you can add your own.
+    """
+
+    def __init__(self, pin0: int, pin1: int, callback = None, timer_id: int = -1):
         """
-        pin0 - the GPIO that goes low when a zero is sent by the reader (Green)
-        pin1 - the GPIO that goes low when a one is sent by the reader (White)
-        callback - the function called with single card argument when a card is read.
+        Inits a new Wiegand object to read from the specified pins.
+
+        Args:
+            pin0 - the pin number that toggles when a zero is sent by the reader (data0, green wire)
+            pin1 - the pin number that toggles when a one is sent by the reader (data1, white wire)
+            callback - the optional function to call when a card is successfully read.
                    eg. def mycallback(card)
                    Leave None if you do not want a callback and will poll using get_card() instead.
-        timer_id - the Timer ID to use for completion checks. Defaults to -1
+            timer_id - the Timer ID number to use for completion checks. Defaults to -1
         """
         self.pin0 = Pin(pin0, Pin.IN, Pin.PULL_UP)
         self.pin1 = Pin(pin1, Pin.IN, Pin.PULL_UP)
@@ -52,7 +56,7 @@ class Wiegand:
         """ Interrupt handler for data1 signal """
         self._on_pin(1)
 
-    def _on_pin(self, bitvalue):
+    def _on_pin(self, bitvalue: 0|1):
         """
         Common interrupt handling code for data0 or data1 signal.
         Accumulate the bit into the current card number.
@@ -69,6 +73,7 @@ class Wiegand:
 
     def _doneCheck(self, t):
         """
+        Timer callback handler.
         When the 'done' check timer expires, determine if any bits have arrived during the previous period.
         If yes, update the done check bit counter to the current value and let timer continue.
         If no, stop the timer, record the completed card, and call the callback if required.
@@ -109,7 +114,14 @@ class Card:
             Can extend the logic with your own formats inside this method.
     """
 
-    def __init__(self, raw_number, bits):
+    def __init__(self, raw_number: int, bits: int):
+        """
+        Inits a new Card object with the raw card number and bit count.
+
+        Args:
+            raw_number:  The integer value of the card number.
+            bits:  The number of bits that the card number was read with.
+        """
         self.raw_number = raw_number
         self.bits = bits
         self.facility = None
